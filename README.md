@@ -1,0 +1,321 @@
+# Activité Pratique N°3 - Développement d'une architecture micro-services
+
+## Introduction
+
+Cette activité pratique a pour objectif de mettre en œuvre une **architecture micro-services complète** basée sur l’écosystème **Spring Boot et Spring Cloud**. L’architecture micro-services constitue aujourd’hui une approche de référence pour le développement d’applications distribuées, scalables et résilientes, en particulier dans des contextes nécessitant une forte modularité et une évolution indépendante des composants.
+
+L’application développée dans ce TP permet la **gestion des factures**, lesquelles sont associées à des **clients** et contiennent des **produits**. Chaque responsabilité fonctionnelle est isolée dans un micro-service indépendant, communiquant avec les autres services via des **API REST**. Cette approche favorise la séparation des préoccupations, la maintenabilité du système et la possibilité de déploiement indépendant de chaque service.
+
+Au cours de cette activité pratique, plusieurs concepts clés des systèmes distribués sont abordés, notamment :
+
+* la **décomposition d’une application monolithique en micro-services**,
+* la **découverte dynamique des services** à l’aide de **Eureka Discovery Service**,
+* le **routage des requêtes** via **Spring Cloud Gateway** avec une configuration statique et dynamique,
+* la **communication inter-services** à l’aide de **OpenFeign**,
+* la **centralisation de la configuration** avec **Spring Cloud Config Server**,
+* ainsi que la mise en place d’un **client frontend Angular** pour l’interaction avec le système.
+
+Cette activité permet ainsi de consolider les compétences pratiques liées aux **architectures micro-services**, à la **communication distribuée**, et à l’utilisation des **outils modernes du cloud natif**, tout en respectant les bonnes pratiques de conception des systèmes distribués.
+
+---
+
+## Mise en place de l'environnement de développement
+
+Avant de commencer le développement des différents micro-services, une **organisation globale du projet** a été mise en place afin de faciliter la gestion, la cohérence et l’évolutivité de l’application. Pour cela, un **projet Maven parent** a été créé. Ce projet parent joue le rôle de conteneur principal et regroupe l’ensemble des micro-services développés dans le cadre de cette activité pratique.
+
+Chaque micro-service (customer-service, inventory-service, billing-service, gateway, discovery-service, config-service, etc.) est implémenté sous la forme d’un **module Maven indépendant**, basé sur **Spring Boot**. Cette approche permet :
+
+* une **séparation claire des responsabilités** entre les différents services,
+* une **gestion centralisée des dépendances** via le `pom.xml` parent,
+* une **uniformisation des versions** des bibliothèques Spring,
+* ainsi qu’un **développement, un test et un déploiement indépendants** de chaque micro-service.
+
+L’utilisation de Maven comme outil de gestion de projet et de dépendances, combinée à Spring Boot, simplifie la configuration initiale et accélère le développement des micro-services. Cette structure modulaire constitue une base solide pour la mise en œuvre d’une **architecture micro-services conforme aux bonnes pratiques des systèmes distribués**.
+
+## I. Créer le micro-service customer-service qui permet de gérer les client
+
+Le micro-service **Customer-Service** a pour rôle principal la **gestion des clients** de l’application. Il constitue l’un des services fondamentaux du système, puisqu’il fournit les informations relatives aux clients (nom, email, identifiant) utilisées par les autres micro-services, notamment le service de facturation.
+
+### 1. Création du module Spring Boot
+
+Le micro-service *Customer-Service* a été créé sous forme d’un **module Maven Spring Boot** intégré au projet parent. Ce module est totalement indépendant et peut être démarré, testé et déployé séparément des autres services, ce qui respecte les principes de l’architecture micro-services.
+
+L’application repose sur **Spring Boot 3**, **Spring Data JPA** et **Spring Data REST**, ce qui permet d’exposer automatiquement des API REST à partir des repositories JPA, sans implémenter explicitement des contrôleurs REST.
+
+Le micro-service s’appuie sur plusieurs dépendances essentielles :
+
+* **Spring Boot Starter Web** pour la création d’API REST,
+* **Spring Data JPA** pour la persistance des données,
+* **Spring Data REST** pour l’exposition automatique des repositories,
+* **H2 Database** pour la base de données en mémoire,
+* **Spring Cloud Eureka Client** pour l’intégration future avec le service de découverte,
+* **Spring Cloud Config Client** pour la centralisation de la configuration,
+* **Lombok** pour simplifier le code,
+* **Spring Boot Actuator** pour la supervision et le monitoring.
+
+
+### 2. Structure du projet
+
+Le micro-service est organisé selon une architecture en couches claire, facilitant la lisibilité et la maintenabilité du code :
+
+```
+main
+├── java
+│   └── org.example.customerservice
+│       ├── config
+│       │   └── RestRepositoryConfig
+│       ├── entities
+│       │   ├── Customer
+│       │   ├── CustomerProjection
+│       │   └── CustomerProjectionEmail
+│       ├── repository
+│       │   └── CustomerRepository
+│       └── CustomerServiceApplication
+└── resources
+```
+
+Cette organisation sépare clairement :
+
+* la **configuration**,
+* les **entités métier**,
+* la **couche d’accès aux données**,
+* et la **classe principale de démarrage**.
+
+### 3. Modélisation de l’entité Customer
+
+L’entité **Customer** représente un client du système. Elle est persistée dans une base de données **H2 en mémoire** à l’aide de JPA.
+
+Elle est composée des attributs suivants :
+
+* `id` : identifiant unique du client (clé primaire),
+* `name` : nom du client,
+* `email` : adresse email du client.
+
+Les annotations JPA permettent la gestion de la persistance, tandis que **Lombok** est utilisé pour réduire le code boilerplate (getters, setters, constructeurs).
+
+### 4. Gestion des projections Spring Data REST
+
+Afin d’optimiser les réponses REST et de contrôler les données exposées, des **projections Spring Data REST** ont été mises en place :
+
+* **CustomerProjection** : permet d’exposer le nom et l’email du client.
+* **CustomerProjectionEmail** : permet d’exposer uniquement l’email du client.
+
+Ces projections offrent une meilleure flexibilité dans l’exposition des données et évitent le surchargement inutile des réponses REST.
+
+### 5. Couche Repository
+
+L’interface **CustomerRepository** étend `JpaRepository`, ce qui permet de bénéficier automatiquement des opérations CRUD standards (Create, Read, Update, Delete).
+
+Grâce à l’annotation `@RepositoryRestResource`, Spring Data REST expose automatiquement ce repository sous forme d’API REST, sans nécessiter l’implémentation manuelle de contrôleurs.
+
+Les endpoints REST sont accessibles via le chemin de base :
+
+```
+/api/customers
+```
+
+
+### 6. Configuration REST et exposition des identifiants
+
+Par défaut, Spring Data REST n’expose pas les identifiants des entités. Afin de rendre l’attribut `id` accessible dans les réponses JSON, une classe de configuration **RestRepositoryConfig** a été ajoutée.
+
+Cette configuration permet explicitement l’exposition de l’identifiant de l’entité **Customer**, ce qui est indispensable pour les communications inter-services.
+
+### 7. Configuration de l’application
+
+Le micro-service est configuré à l’aide du fichier `application.properties`. Les principaux paramètres définis sont :
+
+* le **nom du service** (`customer-service`),
+* le **port d’écoute** (`8081`),
+* l’utilisation d’une **base de données H2 en mémoire**,
+* l’activation de la **console H2**,
+* la désactivation temporaire de **Eureka** et du **Config Server** pour les phases initiales de développement,
+* la définition du **chemin de base des API REST** (`/api`).
+
+## II. Créer le micro-service inventory-service qui permet de gérer les produits
+
+Le micro-service **Inventory-Service** est chargé de la **gestion des produits** disponibles dans le système. Il permet de stocker, consulter et gérer les informations relatives aux produits, telles que leur identifiant, leur nom, leur prix et leur quantité en stock. Ce service joue un rôle essentiel dans le processus de facturation, car il fournit les données nécessaires à la composition des factures.
+
+### 1. Création du module Spring Boot
+
+À l’instar du micro-service *Customer-Service*, le micro-service *Inventory-Service* a été implémenté sous forme d’un **module Maven Spring Boot indépendant**, intégré au projet parent.
+Il utilise les **mêmes dépendances principales** (Spring Web, Spring Data JPA, Spring Data REST, H2, Eureka Client, Config Client, etc.) afin d’assurer une cohérence technologique entre les différents micro-services du système.
+
+### 2. Structure du projet
+
+Le micro-service *Inventory-Service* adopte une structure similaire à celle du *Customer-Service*, favorisant l’uniformité et la maintenabilité de l’architecture globale :
+
+```
+main
+├── java
+│   └── org.example.inventoryservice
+│       ├── config
+│       │   └── RestRepositoryConfig
+│       ├── entities
+│       │   └── Product
+│       ├── repository
+│       │   └── ProductRepository
+│       └── InventoryServiceApplication
+└── resources
+```
+
+Cette organisation permet une séparation claire entre :
+
+* la configuration de l’exposition REST,
+* les entités métier,
+* la couche repository,
+* et la classe principale de démarrage de l’application.
+
+### 3. Modélisation de l’entité Product
+
+L’entité **Product** représente un produit du système de facturation. Elle est persistée à l’aide de **JPA** dans une base de données **H2 en mémoire**.
+
+Elle est composée des attributs suivants :
+
+* `id` : identifiant unique du produit (clé primaire de type `String`),
+* `name` : nom du produit,
+* `price` : prix unitaire du produit,
+* `quantity` : quantité disponible en stock.
+
+L’utilisation de **Lombok** permet de simplifier le code en générant automatiquement les constructeurs, getters, setters et la méthode `toString()`.
+
+### 4. Couche Repository et exposition REST
+
+L’interface **ProductRepository** étend `JpaRepository<Product, String>`, offrant automatiquement l’ensemble des opérations CRUD.
+
+Grâce à l’annotation `@RepositoryRestResource`, Spring Data REST expose automatiquement ce repository sous forme d’API REST, sans implémentation explicite de contrôleurs.
+Les ressources produits sont accessibles via le chemin de base :
+
+```
+/api/products
+```
+
+
+### 5. Configuration REST et exposition des identifiants
+
+Comme pour le micro-service *Customer-Service*, une classe de configuration **RestRepositoryConfig** a été définie afin d’exposer l’identifiant de l’entité **Product** dans les réponses REST.
+
+Cette configuration est indispensable pour permettre aux autres micro-services (notamment le service de facturation) de référencer correctement les produits.
+
+### 6. Configuration de l’application
+
+Le fichier `application.properties` du micro-service *Inventory-Service* définit les paramètres suivants :
+
+* le **nom du service** (`inventory-service`),
+* le **port d’écoute** (`8082`),
+* l’utilisation d’une **base de données H2 en mémoire** (`products-db`),
+* l’activation de la **console H2** pour le test et le débogage,
+* la désactivation temporaire de **Eureka Discovery** et du **Config Server**,
+* le chemin de base des API REST (`/api`).
+
+### 7. Rôle du micro-service Inventory-Service dans l’architecture
+
+Le micro-service *Inventory-Service* constitue la **source de vérité des produits** au sein de l’architecture micro-services. Il est consommé par d’autres services, notamment le **Billing-Service**, pour récupérer les informations nécessaires à la génération des factures, garantissant ainsi une séparation claire des responsabilités et une communication inter-services propre.
+
+## III. Créer la Gateway Spring cloud Gateway
+
+Dans une architecture micro-services, la **Gateway** joue un rôle central en tant que **point d’entrée unique** pour les clients. Elle permet de router les requêtes vers les micro-services appropriés, tout en masquant la complexité interne du système.
+Dans cette activité pratique, une **Gateway basée sur Spring Cloud Gateway** a été mise en place afin de gérer le routage des requêtes vers les micro-services *Customer-Service* et *Inventory-Service*.
+
+### 1. Création du module Gateway-Service
+
+Le micro-service **Gateway-Service** a été créé sous forme d’un **module Maven Spring Boot indépendant**. Contrairement aux autres micro-services, la gateway ne contient pas de logique métier ni de couche de persistance ; son rôle est exclusivement dédié au **routage des requêtes HTTP**.
+
+Les dépendances principales utilisées sont :
+
+* **Spring Cloud Gateway (WebMVC)** pour la gestion du routage,
+* **Spring Boot Actuator** pour la supervision,
+* **Spring Cloud Config Client** pour une intégration ultérieure avec le serveur de configuration,
+* **Eureka Client** pour la découverte dynamique des services dans les étapes suivantes.
+
+### 2. Structure du projet Gateway-Service
+
+La structure du micro-service *Gateway-Service* est volontairement minimale, reflétant son rôle de composant d’infrastructure :
+
+```
+main
+├── java
+│   └── org.example.gatewayservice
+│       └── GatewayServiceApplication
+└── resources
+    ├── application.properties
+    └── application.yml
+```
+
+La configuration de la gateway est principalement définie dans le fichier `application.yml`.
+
+### 3. Configuration de base de la Gateway
+
+Le fichier `application.properties` permet de définir :
+
+* le **nom du service** (`gateway-service`),
+* le **port d’écoute** (`8888`),
+* la désactivation temporaire de **Eureka Discovery** et du **Config Server** pour la phase de configuration statique.
+
+La Gateway est ainsi accessible via l’URL :
+
+```
+http://localhost:8888
+```
+
+### 4. Configuration statique du routage
+
+La configuration statique des routes est définie dans le fichier `application.yml`. Deux routes principales ont été configurées :
+
+* une route vers le **Customer-Service**,
+* une route vers le **Inventory-Service**.
+
+Chaque route est associée à un **prédicat de type Path**, permettant de rediriger les requêtes en fonction de leur URI.
+
+Exemples de routage :
+
+* les requêtes vers `/api/customers/**` sont redirigées vers le micro-service *Customer-Service* (`http://localhost:8081`),
+* les requêtes vers `/api/products/**` sont redirigées vers le micro-service *Inventory-Service* (`http://localhost:8082`).
+
+Cette configuration permet d’accéder aux ressources des différents micro-services **uniquement via la gateway**, sans contacter directement les services internes.
+
+### 5. Initialisation des données pour les tests
+
+Afin de tester le bon fonctionnement de la gateway et du routage, des **données initiales** ont été insérées automatiquement au démarrage des micro-services *Customer-Service* et *Inventory-Service* à l’aide de `CommandLineRunner`.
+
+* Pour le **Customer-Service**, plusieurs clients ont été ajoutés (nom et email).
+* Pour le **Inventory-Service**, plusieurs produits ont été créés avec des identifiants générés, un prix et une quantité en stock.
+
+Ces données ont permis de vérifier que :
+
+* les micro-services fonctionnent correctement de manière indépendante,
+* les requêtes HTTP transitent bien par la gateway,
+* les réponses retournées sont conformes aux données persistées en base H2.
+
+![Image1](screenshots/gateway_customers.png)
+![Image2](screenshots/gateway_products.png)
+
+### 6. Validation du fonctionnement de la Gateway
+
+Les tests réalisés ont confirmé que :
+
+* la gateway est bien opérationnelle sur le port `8888`,
+* les routes statiques sont correctement configurées,
+* les requêtes envoyées via la gateway sont correctement redirigées vers les micro-services cibles,
+* les données retournées correspondent aux données initialisées dans chaque service.
+
+Cette étape constitue une base essentielle avant la mise en place de la **découverte dynamique des services avec Eureka** et la **configuration dynamique des routes**, qui seront abordées dans les parties suivantes.
+
+## IV. Configuration statique du système de routage
+## V. Créer l'annuaire Eureka Discrovery Service
+## VI. Faire une configuration dynamique des routes de la gateway
+## VII. Créer le service de facturation Billing-Service en utilisant Open Feign
+## VIII. Créer le service de configuration         
+## IX. Créer un client Angular
+
+---
+
+## Conclusion
+
+---
+
+## Réalisé par :
+- **Nom :** Wendbénédo Albéric Darius KONSEBO
+- **Module :** Systèmes Distribués et Parallèles
+- **Encadré par :** Pr. Mohamed YOUSSFI
+- **Année académique :** 2025 - 2026

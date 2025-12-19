@@ -302,8 +302,94 @@ Les tests réalisés ont confirmé que :
 Cette étape constitue une base essentielle avant la mise en place de la **découverte dynamique des services avec Eureka** et la **configuration dynamique des routes**, qui seront abordées dans les parties suivantes.
 
 ## IV. Configuration statique du système de routage
+
+Dans une première étape, le routage des requêtes a été configuré de manière **statique** au niveau de la Gateway Spring Cloud Gateway.
+Chaque route était définie avec une URL fixe (`http://localhost:8081` et `http://localhost:8082`) correspondant respectivement aux micro-services *Customer-Service* et *Inventory-Service*.
+
+Cette approche a permis de valider :
+
+* le bon fonctionnement de la Gateway,
+* la redirection correcte des requêtes HTTP,
+* la communication entre la Gateway et les micro-services.
+
+Cependant, cette configuration reste **fortement couplée** aux adresses des services et n’est pas adaptée à un environnement distribué évolutif. Pour résoudre cette limitation, un **service de découverte dynamique** a été mis en place à l’aide de **Eureka Discovery Service**.
+
 ## V. Créer l'annuaire Eureka Discrovery Service
+
+Afin de permettre la **découverte dynamique des micro-services**, un micro-service dédié nommé **Discovery-Service** a été créé.
+Ce service joue le rôle d’**annuaire central**, dans lequel les micro-services s’enregistrent automatiquement et à partir duquel ils peuvent être localisés dynamiquement.
+
+### 1. Création du module Discovery-Service
+
+Le micro-service *Discovery-Service* a été implémenté comme un **module Spring Boot indépendant**, basé sur **Spring Cloud Netflix Eureka Server**.
+
+La dépendance principale utilisée est :
+
+* `spring-cloud-starter-netflix-eureka-server`
+
+Ce module ne contient aucune logique métier et sert uniquement de **service d’infrastructure**.
+
+### 2. Activation du serveur Eureka
+
+Le serveur Eureka est activé à l’aide de l’annotation `@EnableEurekaServer` dans la classe principale de l’application.
+Cela permet au micro-service de fonctionner comme un **registre de services**, capable de recevoir les enregistrements des clients Eureka.
+
+### 3. Configuration du Discovery-Service
+
+Le fichier `application.properties` du *Discovery-Service* définit :
+
+* le **nom du service** (`discovery-service`),
+* le **port d’écoute** (`8761`),
+* la désactivation de l’enregistrement automatique du serveur Eureka dans lui-même.
+
+L’interface web de Eureka est accessible via :
+
+```
+http://localhost:8761
+```
+
+Elle permet de visualiser en temps réel les micro-services enregistrés.
+
+### 4. Enregistrement des micro-services dans Eureka
+
+Après la mise en place du serveur Eureka, les micro-services *Customer-Service*, *Inventory-Service* et *Gateway-Service* ont été configurés en tant que **clients Eureka**.
+
+Les paramètres suivants ont été ajoutés dans leurs fichiers `application.properties` :
+
+* activation de la découverte des services,
+* définition de l’URL du serveur Eureka,
+* préférence pour l’adresse IP lors de l’enregistrement.
+
+Une fois démarrés, les micro-services apparaissent automatiquement dans l’interface Eureka, confirmant leur **enregistrement correct dans l’annuaire**.
+
+![Image3](screenshots/eureka_services.png)
+
 ## VI. Faire une configuration dynamique des routes de la gateway
+
+Après l’intégration de Eureka, la Gateway a été reconfigurée pour utiliser des **URI logiques** au lieu d’adresses physiques.
+
+### 1. Modification des routes de la Gateway
+
+Dans le fichier `application.yml` de la Gateway, les URI statiques ont été remplacées par des URI dynamiques basées sur Eureka, à l’aide du préfixe `lb://` (Load Balancer).
+
+Ainsi :
+
+* `lb://CUSTOMER-SERVICE` est utilisé pour accéder au micro-service *Customer-Service*,
+* `lb://INVENTORY-SERVICE` est utilisé pour accéder au micro-service *Inventory-Service*.
+
+La résolution des services est désormais assurée automatiquement par Eureka.
+
+### 2. Validation du routage dynamique
+
+Après cette modification :
+
+* les routes restent accessibles via la Gateway,
+* aucune adresse IP ou port n’est codé en dur,
+* la Gateway interroge Eureka pour localiser les instances disponibles.
+
+Cette configuration rend l’architecture **plus flexible, plus scalable et plus adaptée à un environnement distribué réel**, où les services peuvent être redémarrés, déplacés ou répliqués dynamiquement.
+
+
 ## VII. Créer le service de facturation Billing-Service en utilisant Open Feign
 ## VIII. Créer le service de configuration         
 ## IX. Créer un client Angular

@@ -364,11 +364,9 @@ Une fois démarrés, les micro-services apparaissent automatiquement dans l’in
 
 ![Image3](screenshots/eureka_services.png)
 
-## VI. Faire une configuration dynamique des routes de la gateway
-
 Après l’intégration de Eureka, la Gateway a été reconfigurée pour utiliser des **URI logiques** au lieu d’adresses physiques.
 
-### 1. Modification des routes de la Gateway
+### 5. Modification des routes de la Gateway
 
 Dans le fichier `application.yml` de la Gateway, les URI statiques ont été remplacées par des URI dynamiques basées sur Eureka, à l’aide du préfixe `lb://` (Load Balancer).
 
@@ -379,8 +377,6 @@ Ainsi :
 
 La résolution des services est désormais assurée automatiquement par Eureka.
 
-### 2. Validation du routage dynamique
-
 Après cette modification :
 
 * les routes restent accessibles via la Gateway,
@@ -389,6 +385,95 @@ Après cette modification :
 
 Cette configuration rend l’architecture **plus flexible, plus scalable et plus adaptée à un environnement distribué réel**, où les services peuvent être redémarrés, déplacés ou répliqués dynamiquement.
 
+## VI. Faire une configuration dynamique des routes de la gateway
+
+Après la mise en place de la découverte de services avec **Eureka**, une configuration plus avancée de la Gateway a été réalisée afin de supprimer toute configuration manuelle des routes et de tirer pleinement parti de la **découverte dynamique**.
+
+### 1. Passage à Spring Cloud Gateway réactive
+
+Dans un premier temps, la Gateway a été migrée de la version **WebMVC** vers la version **réactive (Spring Cloud Gateway)**.
+Cette version est mieux adaptée aux architectures micro-services modernes, car elle repose sur un modèle **non bloquant**, plus performant et plus flexible pour la gestion du routage dynamique.
+
+Pour cela, la dépendance :
+
+* `spring-cloud-starter-gateway-server-webmvc`
+
+a été remplacée par :
+
+* `spring-cloud-starter-gateway`
+
+Le fichier `pom.xml` de la Gateway a été mis à jour afin d’utiliser une version compatible de **Spring Boot 3.x** et **Spring Cloud 2023.x**, garantissant une meilleure stabilité de la configuration réactive.
+
+### 2. Vérification du routage avec la Gateway réactive
+
+Après la migration vers la Gateway réactive, une configuration statique minimale a été temporairement conservée dans le fichier `application.yml` afin de vérifier le bon fonctionnement du routage avec Eureka.
+
+Les routes utilisaient déjà des URI dynamiques basées sur le **load balancer** (`lb://SERVICE-NAME`), confirmant que la Gateway réactive communiquait correctement avec le serveur Eureka.
+
+### 3. Suppression de la configuration statique des routes
+
+Afin de passer à une **configuration totalement dynamique**, le fichier `application.yml` a été renommé (par exemple en `a.yml`) afin qu’il ne soit plus détecté automatiquement par Spring Boot.
+
+Cette étape permet de s’assurer qu’aucune route n’est définie manuellement et que la Gateway repose exclusivement sur la **découverte automatique des services enregistrés dans Eureka**.
+
+### 4. Activation du Discovery Locator automatique
+
+Pour activer la génération dynamique des routes, un **bean spécifique** a été ajouté dans la classe principale de la Gateway.
+
+Ce bean repose sur :
+
+* `ReactiveDiscoveryClient` pour interroger Eureka,
+* `DiscoveryClientRouteDefinitionLocator` pour générer automatiquement les routes,
+* `DiscoveryLocatorProperties` pour configurer le comportement du routage.
+
+Grâce à ce mécanisme, la Gateway crée automatiquement une route pour chaque micro-service enregistré dans Eureka, sans aucune configuration manuelle.
+
+### 5. Accès dynamique aux micro-services
+
+Une fois cette configuration activée, les micro-services deviennent accessibles via la Gateway selon le schéma suivant :
+
+```
+http://localhost:8888/NOM-DU-SERVICE/** 
+```
+
+Par exemple :
+
+* `http://localhost:8888/INVENTORY-SERVICE/api/products`
+* `http://localhost:8888/CUSTOMER-SERVICE/api/customers`
+
+Cela confirme que :
+
+* la Gateway interroge dynamiquement Eureka,
+* les routes sont créées automatiquement,
+* aucun couplage direct avec les adresses IP ou ports des services n’est nécessaire.
+
+### 6. Amélioration de la lisibilité des URLs
+
+Par défaut, les noms des services enregistrés dans Eureka sont en majuscules.
+Afin d’améliorer la lisibilité des URLs, la propriété suivante a été ajoutée dans le fichier `application.properties` de la Gateway :
+
+```
+spring.cloud.gateway.discovery.locator.lower-case-service-id=true
+```
+
+Grâce à cette configuration, les services peuvent être appelés en minuscules, par exemple :
+
+```
+http://localhost:8888/inventory-service/api/products
+```
+
+![Image4](screenshots/dynam_customers.png)
+![Image5](screenshots/dynam_products.png)
+
+### 7. Bénéfices de la configuration dynamique
+
+Cette configuration dynamique avancée apporte plusieurs avantages majeurs :
+
+* suppression totale de la configuration manuelle des routes,
+* meilleure **scalabilité** du système,
+* adaptation automatique aux changements d’instances,
+* réduction du couplage entre les composants,
+* alignement avec les **bonnes pratiques des architectures micro-services**.
 
 ## VII. Créer le service de facturation Billing-Service en utilisant Open Feign
 ## VIII. Créer le service de configuration         

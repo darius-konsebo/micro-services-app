@@ -476,6 +476,94 @@ Cette configuration dynamique avancée apporte plusieurs avantages majeurs :
 * alignement avec les **bonnes pratiques des architectures micro-services**.
 
 ## VII. Créer le service de facturation Billing-Service en utilisant Open Feign
+
+Le **Billing-Service** est un microservice central chargé de la gestion de la facturation. Il assure la création des factures (*Bill*), l’association des produits facturés (*ProductItem*) et l’agrégation des informations provenant des autres microservices, notamment **Customer-Service** et **Inventory-Service**. Afin de permettre cette communication inter-services de manière simple et déclarative, le projet utilise **Spring Cloud OpenFeign**.
+
+### 1. Configuration et dépendances Maven
+
+Le microservice *Billing-Service* est implémenté comme un module **Spring Boot** au sein du projet Maven multi-modules. Son fichier `pom.xml` inclut les dépendances nécessaires à :
+
+* la persistance des données avec **Spring Data JPA**,
+* l’exposition d’API REST et HATEOAS,
+* l’enregistrement auprès du **service de découverte Eureka**,
+* la communication inter-services via **OpenFeign**,
+* l’utilisation d’une base de données **H2 en mémoire** pour les tests.
+
+La gestion des versions Spring Cloud est assurée par l’import du *Spring Cloud Dependency Management*, garantissant la compatibilité entre les différents composants.
+
+### 2. Modélisation des entités métier
+
+Deux entités principales ont été définies :
+
+* **Bill** : représente une facture associée à un client, identifiée par un `customerId`, avec une date de facturation et une liste d’articles facturés.
+* **ProductItem** : représente un produit inclus dans une facture, avec sa quantité et son prix unitaire.
+
+Les relations entre les entités sont gérées via **JPA**, avec une association *One-To-Many* entre `Bill` et `ProductItem`.
+Les objets **Customer** et **Product** ne sont pas persistés localement : ils sont déclarés comme `@Transient`, car ils proviennent d’autres microservices.
+
+### 3. Accès aux données : Repositories JPA
+
+L’accès aux données est assuré par deux interfaces :
+
+* `BillRepository`
+* `ProductItemRepository`
+
+Ces interfaces héritent de `JpaRepository`, ce qui permet de bénéficier des opérations CRUD standards sans implémentation manuelle.
+
+### 4. Communication inter-services avec OpenFeign
+
+Pour récupérer les informations des clients et des produits, deux clients Feign ont été définis :
+
+* **CustomerRestClient** pour communiquer avec le *Customer-Service*
+* **ProductRestClient** pour communiquer avec le *Inventory-Service*
+
+Grâce à OpenFeign, les appels REST sont déclarés sous forme d’interfaces Java, ce qui simplifie considérablement la communication inter-microservices tout en s’appuyant sur la résolution dynamique des services via **Eureka**.
+
+### 5. Configuration et enregistrement auprès d’Eureka
+
+Le microservice est configuré via le fichier `application.properties` pour :
+
+* définir le nom du service (`billing-service`),
+* activer la découverte des services,
+* s’enregistrer automatiquement auprès du **Discovery Server Eureka**,
+* exposer les ressources REST sous le chemin `/api`.
+
+Une base de données **H2 en mémoire** est utilisée afin de faciliter les tests et le débogage.
+
+### 6. Initialisation des données
+
+Un **CommandLineRunner** est utilisé au démarrage de l’application pour :
+
+* récupérer la liste des clients depuis le *Customer-Service*,
+* récupérer la liste des produits depuis le *Inventory-Service*,
+* créer automatiquement des factures,
+* associer des produits à chaque facture avec des quantités aléatoires.
+
+Cette étape permet de disposer rapidement de données cohérentes pour les tests fonctionnels.
+On peut ainsi accéder aux données via la console h2 : 
+![Image6](screenshots/bdd_bills.png)
+
+![Image7](screenshots/bdd_productItem.png)
+
+Le microservice s'enregistre automatiquement dans la discoveru et est accessible via la gateway :
+![Image8](screenshots/gateway_bills.png)
+
+### 7. Exposition des données agrégées via un contrôleur REST
+
+Un contrôleur REST (`BillRestController`) a été mis en place afin de fournir une vue complète d’une facture.
+Lorsqu’une facture est demandée :
+
+* les informations du client sont récupérées dynamiquement via **Customer-Service**,
+* les détails des produits sont enrichis via **Inventory-Service**.
+
+Ainsi, le *Billing-Service* joue pleinement son rôle de **service agrégateur**, en combinant des données provenant de plusieurs microservices pour fournir une réponse complète au client.
+
+Avant exposition il n'y avait pas de détails en rapport avec les entités des autres microservices :
+![Image9](screenshots/billing_id.png)
+
+Après expositions tous les détails relatifs sont donc visibles :
+![Image10](screenshots/billing_id1.png)
+
 ## VIII. Créer le service de configuration         
 ## IX. Créer un client Angular
 

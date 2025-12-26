@@ -37,3 +37,8 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### le dossier config-repo ###
+### il est déjà lui meme un repo qui ne doit pas etre pushé dans
+### le repo principal du fait de contrainte de sécurité
+config-repo/

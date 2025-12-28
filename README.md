@@ -564,12 +564,169 @@ Avant exposition il n'y avait pas de détails en rapport avec les entités des a
 Après expositions tous les détails relatifs sont donc visibles :
 ![Image10](screenshots/billing_id1.png)
 
-## VIII. Créer le service de configuration         
+## VIII. Créer le service de configuration
+
+Dans une architecture microservices, la gestion distribuée des fichiers de configuration devient rapidement complexe. Afin de centraliser et d’unifier la configuration des différents services, un **service de configuration** basé sur **Spring Cloud Config Server** a été mis en place.
+
+Ce service permet de :
+
+* centraliser les fichiers de configuration,
+* gérer plusieurs environnements (*default*, *dev*, *prod*),
+* modifier la configuration sans recompiler les microservices,
+* assurer une cohérence globale de l’architecture.
+
+### 1. Création du microservice *Config-Service*
+
+Un microservice dédié nommé **config-service** a été créé. Il repose sur **Spring Boot** et **Spring Cloud Config Server**.
+Les principales dépendances utilisées sont :
+
+* **spring-cloud-config-server** : pour exposer le serveur de configuration,
+* **spring-cloud-starter-netflix-eureka-client** : pour l’enregistrement auprès du service de découverte,
+* **spring-boot-starter-actuator** : pour exposer les endpoints de gestion et de rafraîchissement de configuration.
+
+Le service est configuré pour fonctionner avec Java 21 et la version compatible de Spring Cloud.
+
+### 2. Activation du serveur de configuration
+
+Le service de configuration est activé simplement grâce à l’annotation :
+
+```java
+@EnableConfigServer
+```
+
+Cette annotation transforme le microservice en **serveur central de configuration**, capable de fournir dynamiquement les fichiers de configuration aux autres microservices du système.
+
+### 3. Mise en place du dépôt de configuration (*config-repo*)
+
+Un dépôt externe nommé **config-repo** a été créé afin de stocker l’ensemble des fichiers de configuration.
+Ce dépôt contient les fichiers suivants :
+
+* `application.properties` : configuration globale commune à tous les microservices,
+* `{service-name}.properties` : configuration par défaut de chaque microservice,
+* `{service-name}-dev.properties` : configuration spécifique à l’environnement de développement,
+* `{service-name}-prod.properties` : configuration spécifique à l’environnement de production.
+
+Ce dépôt est volontairement séparé du projet Maven principal et ajouté au `.gitignore` local, afin d’éviter toute dépendance directe entre le code et la configuration.
+
+### 4. Configuration locale du *Config-Service*
+
+Dans un premier temps, le dépôt de configuration n’étant pas encore hébergé sur GitHub, le *Config-Service* est configuré pour utiliser un chemin local :
+
+```properties
+spring.application.name=config-service
+server.port=9999
+spring.cloud.config.server.git.uri=file:///chemin/absolu/du/config-repo
+```
+
+Cette configuration permet de tester localement le fonctionnement du serveur de configuration avant son externalisation.
+
+![Image11](screenshots/config-default.png)
+
+![Image12](screenshots/config-custo-default.png)
+
+![Image13](screenshots/config-custo-dev.png)
+
+![Image14](screenshots/config-custo-prod.png)
+
+### 5. Intégration du Config-Service dans les microservices
+
+Pour chaque microservice (*Customer-Service*, *Billing-Service*, *Inventory-Service*), la configuration locale a été volontairement réduite au strict minimum.
+Les microservices sont configurés pour récupérer leur configuration depuis le *Config-Service* via :
+
+```properties
+spring.config.import=optional:configserver:http://localhost:9999
+spring.cloud.config.enabled=true
+```
+
+Ainsi, la majorité des paramètres (Eureka, paramètres globaux, etc.) sont désormais centralisés.
+
+### 6. Test de la configuration avec *Customer-Service*
+
+Afin de valider le bon fonctionnement du serveur de configuration, un contrôleur de test a été créé dans le *Customer-Service*.
+Ce contrôleur permet :
+
+* de lire des propriétés globales via `@Value`,
+* de lire des propriétés spécifiques via `@ConfigurationProperties`.
+
+Deux approches sont ainsi comparées :
+
+* l’injection directe de propriétés,
+* le binding typé via une classe dédiée (`CustomerConfigParams`).
+
+L’annotation `@RefreshScope` permet d’indiquer que les valeurs peuvent être rechargées dynamiquement.
+
+### 7. Rafraîchissement dynamique de la configuration
+
+Par défaut, les changements effectués dans le dépôt de configuration ne sont pas appliqués instantanément.
+Deux mécanismes ont été observés :
+
+* un **redémarrage du microservice** permet de charger la nouvelle configuration,
+* l’utilisation de l’endpoint **Actuator `/actuator/refresh`** permet de recharger les paramètres dynamiquement après un *commit* du dépôt de configuration.
+
+Ce mécanisme facilite les ajustements de configuration sans interruption majeure du système.
+
+### 8. Centralisation complète des configurations
+
+Une fois les tests validés, la configuration a été entièrement centralisée :
+
+* les paramètres communs ont été placés dans `application.properties`,
+* les paramètres spécifiques (base de données, nom de schéma H2, etc.) sont conservés dans les fichiers propres à chaque microservice.
+
+Cela permet de réduire drastiquement la duplication des configurations locales.
+
+### 9. Externalisation du dépôt de configuration sur GitHub
+
+Le dépôt **config-repo** a ensuite été hébergé sur GitHub afin de permettre une configuration réellement distribuée.
+Le *Config-Service* est alors configuré pour utiliser ce dépôt distant :
+
+```properties
+spring.cloud.config.server.git.uri=https://github.com/darius-konsebo/config-ecom-app
+```
+
+Cette approche offre :
+
+* une meilleure traçabilité des changements (via Git),
+* une gestion collaborative de la configuration,
+* une séparation claire entre code et paramètres applicatifs.
+
+### 10. Validation globale
+
+Des tests finaux ont été réalisés sur l’ensemble des microservices.
+Le bon fonctionnement du **Billing-Service** a servi de test global, car il communique à la fois avec :
+
+* le *Customer-Service*,
+* le *Inventory-Service*,
+* le *Discovery Service*,
+* le *Config-Service*.
+
+Le succès de ces tests confirme la cohérence et la stabilité de l’architecture mise en place.
+
+![Image15](screenshots/eureka_final.png)
+
+![Image16](screenshots/config_customer.png)
+
+![Image17](screenshots/test_gen_bills.png)
+
 ## IX. Créer un client Angular
 
 ---
 
 ## Conclusion
+
+Cette activité pratique a permis de concevoir et de mettre en œuvre une **architecture microservices complète et cohérente** basée sur l’écosystème **Spring Boot et Spring Cloud**. L’objectif principal était de comprendre, expérimenter et valider les mécanismes fondamentaux des systèmes distribués modernes, tout en appliquant des bonnes pratiques d’architecture logicielle.
+
+Au cours de cette activité, plusieurs composants clés ont été mis en place avec succès. La création d’un **projet Maven multi-modules** a permis de structurer proprement l’ensemble des microservices, facilitant ainsi leur évolution et leur maintenance. Chaque microservice a été développé comme une application Spring Boot indépendante, disposant de sa propre base de données et de responsabilités bien définies.
+
+Le **service de découverte (Eureka)** a assuré l’enregistrement dynamique et la localisation des microservices, tandis que la **passerelle API (Spring Cloud Gateway)** a joué le rôle de point d’entrée unique du système, en gérant le routage dynamique des requêtes grâce à la découverte de services. L’utilisation du **Gateway réactif** a permis une meilleure adaptation aux environnements distribués et scalables.
+
+La communication inter-services a été réalisée à l’aide de **OpenFeign**, offrant une abstraction simple et efficace pour l’appel des services distants. Le *Billing-Service*, en particulier, a permis de démontrer l’orchestration des données provenant de plusieurs microservices (clients et produits), illustrant concrètement les échanges synchrones dans une architecture distribuée.
+
+La mise en place d’un **service de configuration centralisé (Spring Cloud Config Server)** a constitué une étape clé de cette activité. Elle a permis de centraliser les paramètres applicatifs, de gérer plusieurs environnements (développement, production) et de réduire considérablement la duplication des configurations locales. L’utilisation des endpoints Actuator a également permis de tester le rafraîchissement dynamique des configurations.
+
+Les tests réalisés via la **console H2**, l’enregistrement dans **Eureka** et l’accès aux services à travers la **Gateway** ont confirmé le bon fonctionnement global de l’architecture et la bonne intégration de l’ensemble des composants.
+
+Enfin, cette activité pratique a permis d’acquérir une compréhension approfondie des enjeux liés aux systèmes distribués : **découplage, communication inter-services, centralisation de la configuration, scalabilité et maintenabilité**.
+La partie cliente **Angular** n’a pas encore été implémentée et fera l’objet d’une extension future du projet afin de compléter la chaîne applicative par une interface utilisateur moderne consommant les APIs exposées.
 
 ---
 
